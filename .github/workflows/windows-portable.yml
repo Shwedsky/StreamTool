@@ -24,6 +24,9 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      - name: Analytics tests
+        run: npm test
+
       - name: Build
         run: npm run build
 
@@ -33,7 +36,7 @@ jobs:
       - name: Assemble portable Windows package
         shell: pwsh
         run: |
-          $root = Join-Path $PWD 'portable\StreamTool'
+          $root = Join-Path $PWD 'portable\StreamToolByShwedsky'
           New-Item -ItemType Directory -Force -Path $root | Out-Null
 
           $nodeExe = (Get-Command node).Source
@@ -46,37 +49,37 @@ jobs:
           @echo off
           setlocal
           cd /d "%~dp0"
-          title StreamTool
-          echo StreamTool is starting...
+          title StreamToolByShwedsky
+          echo StreamToolByShwedsky is starting...
           echo The browser should open automatically.
           echo Keep this window open while testing.
-          echo Closing this window stops StreamTool.
+          echo Closing this window stops StreamToolByShwedsky.
           echo.
           node.exe dist\server\server\index.js
           if errorlevel 1 (
             echo.
-            echo StreamTool stopped with an error.
+            echo StreamToolByShwedsky stopped with an error.
             pause
           )
           '@ | Set-Content -Path (Join-Path $root 'START_STREAMTOOL.cmd') -Encoding ascii
 
           @'
-          STREAMTOOL - PORTABLE TEST BUILD
+          STREAMTOOLBYSHWEDSKY - PORTABLE TEST BUILD
 
           1. Double-click START_STREAMTOOL.cmd
           2. Keep the black window open while testing.
           3. Your default browser should open automatically.
-          4. StreamTool chooses a free localhost port automatically.
-          5. Closing the black window stops StreamTool.
+          4. The app chooses a free localhost port automatically.
+          5. Closing the black window stops the app.
 
-          Nothing needs to be installed. Git and Node.js are already bundled in this test package.
+          Nothing needs to be installed. The required Node.js runtime is bundled in this test package.
           Application data is stored in %LOCALAPPDATA%\StreamTool.
           '@ | Set-Content -Path (Join-Path $root 'README_TEST.txt') -Encoding ascii
 
       - name: Smoke test packaged build
         shell: pwsh
         run: |
-          $root = Join-Path $PWD 'portable\StreamTool'
+          $root = Join-Path $PWD 'portable\StreamToolByShwedsky'
           $stdout = Join-Path $env:RUNNER_TEMP 'streamtool-portable.out.log'
           $stderr = Join-Path $env:RUNNER_TEMP 'streamtool-portable.err.log'
           $env:STREAMTOOL_NO_OPEN = '1'
@@ -104,11 +107,13 @@ jobs:
             if (-not $url) {
               if (Test-Path $stdout) { Get-Content $stdout }
               if (Test-Path $stderr) { Get-Content $stderr }
-              throw 'Portable StreamTool did not expose a localhost URL.'
+              throw 'Portable StreamToolByShwedsky did not expose a localhost URL.'
             }
 
             Invoke-WebRequest "$url/api/health" -UseBasicParsing | Out-Null
-            Invoke-WebRequest "$url/api/snapshot" -UseBasicParsing | Out-Null
+            $snapshot = (Invoke-WebRequest "$url/api/snapshot" -UseBasicParsing).Content
+            if ($snapshot -notmatch '"analytics"') { throw 'Analytics payload missing from packaged build.' }
+            Invoke-WebRequest "$url/api/sessions" -UseBasicParsing | Out-Null
             Invoke-WebRequest "$url/" -UseBasicParsing | Out-Null
             Invoke-WebRequest "$url/compact" -UseBasicParsing | Out-Null
           }
@@ -121,8 +126,8 @@ jobs:
       - name: Upload portable package
         uses: actions/upload-artifact@v4
         with:
-          name: StreamTool-Windows-x64
-          path: portable/StreamTool
+          name: StreamToolByShwedsky-Windows-x64
+          path: portable/StreamToolByShwedsky
           if-no-files-found: error
           retention-days: 14
           compression-level: 6
