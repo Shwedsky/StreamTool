@@ -25,6 +25,9 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      - name: Analytics tests
+        run: npm test
+
       - name: Build
         run: npm run build
 
@@ -52,6 +55,7 @@ jobs:
           fi
 
           curl --fail --silent "$URL/api/health"
-          curl --fail --silent "$URL/api/snapshot"
+          curl --fail --silent "$URL/api/snapshot" | grep -q '"analytics"'
+          curl --fail --silent "$URL/api/sessions" | grep -q '"sessions"'
           curl --fail --silent "$URL/" > /dev/null
           curl --fail --silent "$URL/compact" > /dev/null
