@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { AppSnapshot, PlatformSnapshot } from '../shared/domain';
+import type { AppSnapshot, HistoryPoint, PlatformSnapshot } from '../shared/domain';
 
 const numberFormatter = new Intl.NumberFormat('ru-RU');
 
@@ -22,6 +22,12 @@ function formatUpdatedAt(value: string): string {
     minute: '2-digit',
     second: '2-digit'
   });
+}
+
+function formatDelta(value: number | null): string {
+  if (value == null) return '—';
+  if (value > 0) return `+${numberFormatter.format(value)}`;
+  return numberFormatter.format(value);
 }
 
 function useLiveSnapshot() {
@@ -62,7 +68,15 @@ function BrandMark() {
   );
 }
 
-function PlatformCard({ platform, now }: { platform: PlatformSnapshot; now: string }) {
+function PlatformCard({
+  platform,
+  now,
+  sharePercent
+}: {
+  platform: PlatformSnapshot;
+  now: string;
+  sharePercent: number | null;
+}) {
   return (
     <article className="platform-card">
       <div className="platform-card__top">
@@ -70,7 +84,7 @@ function PlatformCard({ platform, now }: { platform: PlatformSnapshot; now: stri
           <p className="platform-name">{platform.platformName}</p>
           <div className="platform-online">
             <strong>{formatNumber(platform.viewers)}</strong>
-            <span>Зрители Online</span>
+            <div><span>Зрители Online</span>{sharePercent != null && <small>{sharePercent}% общего онлайна</small>}</div>
           </div>
         </div>
         <div className={`live-pill ${platform.health === 'error' ? 'live-pill--error' : ''}`}>
@@ -110,7 +124,90 @@ function PlatformCard({ platform, now }: { platform: PlatformSnapshot; now: stri
   );
 }
 
+function chartPath(
+  history: HistoryPoint[],
+  selector: (point: HistoryPoint) => number
+): string {
+  if (!history.length) return '';
+  const width = 1000;
+  const height = 142;
+  const maxValue = Math.max(1, ...history.flatMap((point) => [
+    point.totalViewers,
+    ...Object.values(point.viewersByPlatform)
+  ]));
+
+  return history.map((point, index) => {
+    const x = history.length === 1 ? width / 2 : (index / (history.length - 1)) * width;
+    const y = height - (selector(point) / maxValue) * (height - 10) + 5;
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  }).join(' ');
+}
+
+function AnalyticsPanel({ snapshot }: { snapshot: AppSnapshot }) {
+  const { analytics } = snapshot;
+  const history = analytics.history;
+  const totalPath = chartPath(history, (point) => point.totalViewers);
+  const vkPath = chartPath(history, (point) => point.viewersByPlatform['vk-live'] ?? 0);
+  const twitchPath = chartPath(history, (point) => point.viewersByPlatform.twitch ?? 0);
+  const firstTime = history[0]?.capturedAt;
+  const lastTime = history.at(-1)?.capturedAt;
+
+  const deltaItems = [
+    ['1 мин', analytics.deltas.oneMinute],
+    ['5 мин', analytics.deltas.fiveMinutes],
+    ['15 мин', analytics.deltas.fifteenMinutes],
+    ['30 мин', analytics.deltas.thirtyMinutes]
+  ] as const;
+
+  return (
+    <section className="analytics-panel">
+      <div className="analytics-summary">
+        <div className="analytics-title">
+          <p className="eyebrow">Динамика стрима</p>
+          <div className="chart-legend">
+            <span className="legend-total"><i />Всего</span>
+            <span className="legend-vk"><i />VK</span>
+            <span className="legend-twitch"><i />Twitch</span>
+          </div>
+        </div>
+        <div className="analytics-kpis">
+          <div><span>Средний за наблюдение</span><strong>{formatNumber(analytics.averageViewers)}</strong></div>
+          <div><span>Пик</span><strong>{formatNumber(analytics.peakViewers)}</strong><small>{analytics.peakAt ? formatUpdatedAt(analytics.peakAt) : '—'}</small></div>
+          <div><span>Лучший рост</span><strong>{analytics.bestGrowth ? formatDelta(analytics.bestGrowth.delta) : '—'}</strong><small>{analytics.bestGrowth ? `за ${analytics.bestGrowth.minutes} мин` : 'собираем данные'}</small></div>
+        </div>
+        <div className="delta-strip">
+          {deltaItems.map(([label, value]) => (
+            <div key={label} className={value == null ? '' : value > 0 ? 'delta-up' : value < 0 ? 'delta-down' : ''}>
+              <span>{label}</span><strong>{formatDelta(value)}</strong>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="chart-wrap">
+        {history.length < 2 ? (
+          <div className="chart-empty">Собираем первые точки графика…</div>
+        ) : (
+          <>
+            <svg className="viewer-chart" viewBox="0 0 1000 142" preserveAspectRatio="none" role="img" aria-label="График зрителей текущего стрима">
+              <line x1="0" y1="35.5" x2="1000" y2="35.5" className="chart-grid" />
+              <line x1="0" y1="71" x2="1000" y2="71" className="chart-grid" />
+              <line x1="0" y1="106.5" x2="1000" y2="106.5" className="chart-grid" />
+              <polyline points={vkPath} className="chart-line chart-line--vk" />
+              <polyline points={twitchPath} className="chart-line chart-line--twitch" />
+              <polyline points={totalPath} className="chart-line chart-line--total" />
+            </svg>
+            <div className="chart-time"><span>{firstTime ? formatUpdatedAt(firstTime) : '—'}</span><span>{lastTime ? formatUpdatedAt(lastTime) : '—'}</span></div>
+          </>
+        )}
+      </div>
+    </section>
+  );
+}
+
 function Dashboard({ snapshot, connected }: { snapshot: AppSnapshot; connected: boolean }) {
+  const shareByPlatform = new Map(snapshot.analytics.audienceShare.map((share) => [share.platformId, share.percent]));
+
   return (
     <main className="shell">
       <header className="header">
@@ -122,24 +219,24 @@ function Dashboard({ snapshot, connected }: { snapshot: AppSnapshot; connected: 
         <p className="eyebrow">Суммарный онлайн</p>
         <div className="hero-number"><span className="eye">◉</span>{formatNumber(snapshot.totalViewers)}</div>
         <div className="hero-meta">
-          <div><span>Макс. зрителей</span><strong>{formatNumber(snapshot.peakViewers)}</strong></div>
-          <div><span>Площадки</span><strong>{snapshot.platforms.filter((p) => p.live).length} LIVE</strong></div>
+          <div><span>Макс. зрителей</span><strong>{formatNumber(snapshot.analytics.peakViewers)}</strong></div>
+          <div><span>Средний онлайн</span><strong>{formatNumber(snapshot.analytics.averageViewers)}</strong></div>
           <div><span>Последнее обновление</span><strong>{formatUpdatedAt(snapshot.generatedAt)}</strong></div>
         </div>
       </section>
 
       <section className="platforms">
-        {snapshot.platforms.map((platform) => <PlatformCard key={platform.platformId} platform={platform} now={snapshot.generatedAt} />)}
+        {snapshot.platforms.map((platform) => (
+          <PlatformCard
+            key={platform.platformId}
+            platform={platform}
+            now={snapshot.generatedAt}
+            sharePercent={shareByPlatform.get(platform.platformId) ?? null}
+          />
+        ))}
       </section>
 
-      <section className="analytics-preview">
-        <div>
-          <p className="eyebrow">Аналитика</p>
-          <h3>История стрима сохраняется</h3>
-          <p>Следующий этап: график Total / VK / Twitch, средний онлайн, изменения за 1 / 5 / 15 / 30 минут и итоговый отчёт.</p>
-        </div>
-        <div className="pulse-bars" aria-hidden="true"><i/><i/><i/><i/><i/><i/><i/><i/><i/><i/></div>
-      </section>
+      <AnalyticsPanel snapshot={snapshot} />
     </main>
   );
 }
@@ -150,10 +247,11 @@ function Compact({ snapshot, connected }: { snapshot: AppSnapshot; connected: bo
     <main className="compact">
       <div className="compact-brand"><BrandMark /><strong>StreamToolByShwedsky</strong></div>
       <div className="compact-top"><span><i className={connected ? 'status-dot' : 'status-dot status-dot--down'} /> LIVE</span><strong>{live[0] ? formatDuration(live[0].startedAt, snapshot.generatedAt) : '—'}</strong></div>
-      <div className="compact-total"><small>СУММАРНЫЙ ОНЛАЙН</small><strong>◉ {formatNumber(snapshot.totalViewers)}</strong><span>Макс. зрителей {formatNumber(snapshot.peakViewers)}</span></div>
+      <div className="compact-total"><small>СУММАРНЫЙ ОНЛАЙН</small><strong>◉ {formatNumber(snapshot.totalViewers)}</strong><span>Макс. {formatNumber(snapshot.analytics.peakViewers)} · Средний {formatNumber(snapshot.analytics.averageViewers)}</span></div>
       <div className="compact-platforms">
         {snapshot.platforms.map((platform) => <div key={platform.platformId}><span>{platform.platformName}</span><strong>{formatNumber(platform.viewers)}</strong><small>Зрители Online</small></div>)}
       </div>
+      <div className="compact-deltas"><span>Δ 5 мин</span><strong>{formatDelta(snapshot.analytics.deltas.fiveMinutes)}</strong><span>Δ 15 мин</span><strong>{formatDelta(snapshot.analytics.deltas.fifteenMinutes)}</strong></div>
       <div className="compact-foot">Обновлено {formatUpdatedAt(snapshot.generatedAt)} · demo</div>
     </main>
   );
