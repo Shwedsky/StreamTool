@@ -59,3 +59,4 @@ jobs:
           curl --fail --silent "$URL/api/sessions" | grep -q '"sessions"'
           curl --fail --silent "$URL/" > /dev/null
           curl --fail --silent "$URL/compact" > /dev/null
+          curl --fail --silent "$URL/reports" > /dev/null
