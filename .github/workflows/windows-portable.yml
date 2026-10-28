@@ -116,6 +116,7 @@ jobs:
             Invoke-WebRequest "$url/api/sessions" -UseBasicParsing | Out-Null
             Invoke-WebRequest "$url/" -UseBasicParsing | Out-Null
             Invoke-WebRequest "$url/compact" -UseBasicParsing | Out-Null
+            Invoke-WebRequest "$url/reports" -UseBasicParsing | Out-Null
           }
           finally {
             if (-not $process.HasExited) {
