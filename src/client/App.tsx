@@ -1,7 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { AppSnapshot, HistoryPoint, PlatformSnapshot } from '../shared/domain';
+import type { AppSnapshot, HistoryPoint, PlatformSnapshot, StreamAnalytics } from '../shared/domain';
 
 const numberFormatter = new Intl.NumberFormat('ru-RU');
+
+interface SessionInfo {
+  id: string;
+  streamStartedAt: string;
+  observedAt: string;
+  endedAt: string | null;
+}
 
 function formatNumber(value: number | null): string {
   return value == null ? '—' : numberFormatter.format(value);
@@ -21,6 +28,16 @@ function formatUpdatedAt(value: string): string {
     hour: '2-digit',
     minute: '2-digit',
     second: '2-digit'
+  });
+}
+
+function formatDateTime(value: string): string {
+  return new Date(value).toLocaleString('ru-RU', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
   });
 }
 
@@ -124,10 +141,7 @@ function PlatformCard({
   );
 }
 
-function chartPath(
-  history: HistoryPoint[],
-  selector: (point: HistoryPoint) => number
-): string {
+function chartPath(history: HistoryPoint[], selector: (point: HistoryPoint) => number): string {
   if (!history.length) return '';
   const width = 1000;
   const height = 142;
@@ -143,15 +157,42 @@ function chartPath(
   }).join(' ');
 }
 
-function AnalyticsPanel({ snapshot }: { snapshot: AppSnapshot }) {
-  const { analytics } = snapshot;
-  const history = analytics.history;
+function ViewerChart({ history, emptyText = 'Собираем первые точки графика…' }: { history: HistoryPoint[]; emptyText?: string }) {
   const totalPath = chartPath(history, (point) => point.totalViewers);
   const vkPath = chartPath(history, (point) => point.viewersByPlatform['vk-live'] ?? 0);
   const twitchPath = chartPath(history, (point) => point.viewersByPlatform.twitch ?? 0);
   const firstTime = history[0]?.capturedAt;
   const lastTime = history.at(-1)?.capturedAt;
 
+  if (history.length < 2) return <div className="chart-empty">{emptyText}</div>;
+
+  return (
+    <>
+      <svg className="viewer-chart" viewBox="0 0 1000 142" preserveAspectRatio="none" role="img" aria-label="График зрителей стрима">
+        <line x1="0" y1="35.5" x2="1000" y2="35.5" className="chart-grid" />
+        <line x1="0" y1="71" x2="1000" y2="71" className="chart-grid" />
+        <line x1="0" y1="106.5" x2="1000" y2="106.5" className="chart-grid" />
+        <polyline points={vkPath} className="chart-line chart-line--vk" />
+        <polyline points={twitchPath} className="chart-line chart-line--twitch" />
+        <polyline points={totalPath} className="chart-line chart-line--total" />
+      </svg>
+      <div className="chart-time"><span>{firstTime ? formatUpdatedAt(firstTime) : '—'}</span><span>{lastTime ? formatUpdatedAt(lastTime) : '—'}</span></div>
+    </>
+  );
+}
+
+function ChartLegend() {
+  return (
+    <div className="chart-legend">
+      <span className="legend-total"><i />Всего</span>
+      <span className="legend-vk"><i />VK</span>
+      <span className="legend-twitch"><i />Twitch</span>
+    </div>
+  );
+}
+
+function AnalyticsPanel({ snapshot }: { snapshot: AppSnapshot }) {
+  const { analytics } = snapshot;
   const deltaItems = [
     ['1 мин', analytics.deltas.oneMinute],
     ['5 мин', analytics.deltas.fiveMinutes],
@@ -162,14 +203,7 @@ function AnalyticsPanel({ snapshot }: { snapshot: AppSnapshot }) {
   return (
     <section className="analytics-panel">
       <div className="analytics-summary">
-        <div className="analytics-title">
-          <p className="eyebrow">Динамика стрима</p>
-          <div className="chart-legend">
-            <span className="legend-total"><i />Всего</span>
-            <span className="legend-vk"><i />VK</span>
-            <span className="legend-twitch"><i />Twitch</span>
-          </div>
-        </div>
+        <div className="analytics-title"><p className="eyebrow">Динамика стрима</p><ChartLegend /></div>
         <div className="analytics-kpis">
           <div><span>Средний за наблюдение</span><strong>{formatNumber(analytics.averageViewers)}</strong></div>
           <div><span>Пик</span><strong>{formatNumber(analytics.peakViewers)}</strong><small>{analytics.peakAt ? formatUpdatedAt(analytics.peakAt) : '—'}</small></div>
@@ -183,24 +217,7 @@ function AnalyticsPanel({ snapshot }: { snapshot: AppSnapshot }) {
           ))}
         </div>
       </div>
-
-      <div className="chart-wrap">
-        {history.length < 2 ? (
-          <div className="chart-empty">Собираем первые точки графика…</div>
-        ) : (
-          <>
-            <svg className="viewer-chart" viewBox="0 0 1000 142" preserveAspectRatio="none" role="img" aria-label="График зрителей текущего стрима">
-              <line x1="0" y1="35.5" x2="1000" y2="35.5" className="chart-grid" />
-              <line x1="0" y1="71" x2="1000" y2="71" className="chart-grid" />
-              <line x1="0" y1="106.5" x2="1000" y2="106.5" className="chart-grid" />
-              <polyline points={vkPath} className="chart-line chart-line--vk" />
-              <polyline points={twitchPath} className="chart-line chart-line--twitch" />
-              <polyline points={totalPath} className="chart-line chart-line--total" />
-            </svg>
-            <div className="chart-time"><span>{firstTime ? formatUpdatedAt(firstTime) : '—'}</span><span>{lastTime ? formatUpdatedAt(lastTime) : '—'}</span></div>
-          </>
-        )}
-      </div>
+      <div className="chart-wrap"><ViewerChart history={analytics.history} /></div>
     </section>
   );
 }
@@ -212,7 +229,7 @@ function Dashboard({ snapshot, connected }: { snapshot: AppSnapshot; connected: 
     <main className="shell">
       <header className="header">
         <div className="brand"><BrandMark /><div><strong>StreamToolByShwedsky</strong><small>Панель мультистрима</small></div></div>
-        <div className="header-status"><i className={connected ? 'status-dot' : 'status-dot status-dot--down'} />{connected ? 'данные подключены' : 'переподключение'}<span>DEMO</span></div>
+        <div className="header-actions"><a href="/reports">Отчёты</a><div className="header-status"><i className={connected ? 'status-dot' : 'status-dot status-dot--down'} />{connected ? 'данные подключены' : 'переподключение'}<span>DEMO</span></div></div>
       </header>
 
       <section className="hero">
@@ -227,12 +244,7 @@ function Dashboard({ snapshot, connected }: { snapshot: AppSnapshot; connected: 
 
       <section className="platforms">
         {snapshot.platforms.map((platform) => (
-          <PlatformCard
-            key={platform.platformId}
-            platform={platform}
-            now={snapshot.generatedAt}
-            sharePercent={shareByPlatform.get(platform.platformId) ?? null}
-          />
+          <PlatformCard key={platform.platformId} platform={platform} now={snapshot.generatedAt} sharePercent={shareByPlatform.get(platform.platformId) ?? null} />
         ))}
       </section>
 
@@ -257,13 +269,90 @@ function Compact({ snapshot, connected }: { snapshot: AppSnapshot; connected: bo
   );
 }
 
-export function App() {
-  const { snapshot, connected } = useLiveSnapshot();
-  const compact = useMemo(() => window.location.pathname === '/compact', []);
+function Reports() {
+  const [sessions, setSessions] = useState<SessionInfo[]>([]);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [analytics, setAnalytics] = useState<StreamAnalytics | null>(null);
 
   useEffect(() => {
-    document.title = compact ? 'StreamToolByShwedsky · Compact' : 'StreamToolByShwedsky';
-  }, [compact]);
+    fetch('/api/sessions', { cache: 'no-store' })
+      .then((response) => response.json() as Promise<{ sessions: SessionInfo[] }>)
+      .then(({ sessions: values }) => {
+        setSessions(values);
+        setSelectedId((current) => current ?? values[0]?.id ?? null);
+      })
+      .catch(() => setSessions([]));
+  }, []);
+
+  useEffect(() => {
+    if (!selectedId) {
+      setAnalytics(null);
+      return;
+    }
+    fetch(`/api/sessions/${encodeURIComponent(selectedId)}`, { cache: 'no-store' })
+      .then((response) => response.json() as Promise<{ analytics: StreamAnalytics }>)
+      .then((value) => setAnalytics(value.analytics))
+      .catch(() => setAnalytics(null));
+  }, [selectedId]);
+
+  const selected = sessions.find((session) => session.id === selectedId) ?? null;
+
+  return (
+    <main className="reports-shell">
+      <header className="reports-header">
+        <div className="brand"><BrandMark /><div><strong>StreamToolByShwedsky</strong><small>Отчёты по стримам</small></div></div>
+        <a href="/">← Онлайн-панель</a>
+      </header>
+      <div className="reports-layout">
+        <aside className="session-list">
+          <h1>Сессии</h1>
+          {sessions.length === 0 && <p className="reports-muted">Сессий пока нет.</p>}
+          {sessions.map((session) => (
+            <button key={session.id} type="button" className={session.id === selectedId ? 'session-item session-item--active' : 'session-item'} onClick={() => setSelectedId(session.id)}>
+              <strong>{formatDateTime(session.observedAt)}</strong>
+              <span>{session.endedAt ? 'Завершён' : 'Сейчас идёт'}</span>
+            </button>
+          ))}
+        </aside>
+        <section className="report-card">
+          {!selected || !analytics ? (
+            <div className="report-empty">Выберите сессию для просмотра отчёта.</div>
+          ) : (
+            <>
+              <div className="report-top">
+                <div><p className="eyebrow">{selected.endedAt ? 'Завершённый стрим' : 'Текущий стрим'}</p><h2>{formatDateTime(selected.streamStartedAt)}</h2><p className="reports-muted">Наблюдение с {formatDateTime(selected.observedAt)}{selected.endedAt ? ` до ${formatDateTime(selected.endedAt)}` : ''}</p></div>
+                <ChartLegend />
+              </div>
+              <div className="report-kpis">
+                <div><span>Средний онлайн</span><strong>{formatNumber(analytics.averageViewers)}</strong></div>
+                <div><span>Макс. зрителей</span><strong>{formatNumber(analytics.peakViewers)}</strong><small>{analytics.peakAt ? formatUpdatedAt(analytics.peakAt) : '—'}</small></div>
+                <div><span>Лучший рост</span><strong>{analytics.bestGrowth ? formatDelta(analytics.bestGrowth.delta) : '—'}</strong><small>{analytics.bestGrowth ? `за ${analytics.bestGrowth.minutes} мин` : '—'}</small></div>
+                <div><span>Точек данных</span><strong>{formatNumber(analytics.sampleCount)}</strong></div>
+              </div>
+              <div className="report-chart"><ViewerChart history={analytics.history} emptyText="Недостаточно точек для графика." /></div>
+            </>
+          )}
+        </section>
+      </div>
+    </main>
+  );
+}
+
+export function App() {
+  const { snapshot, connected } = useLiveSnapshot();
+  const path = useMemo(() => window.location.pathname, []);
+  const compact = path === '/compact';
+  const reports = path === '/reports';
+
+  useEffect(() => {
+    document.title = reports
+      ? 'StreamToolByShwedsky · Отчёты'
+      : compact
+        ? 'StreamToolByShwedsky · Compact'
+        : 'StreamToolByShwedsky';
+  }, [compact, reports]);
+
+  if (reports) return <Reports />;
 
   if (!snapshot) {
     return <main className="loading"><BrandMark /><p>Подключаем StreamToolByShwedsky…</p></main>;
