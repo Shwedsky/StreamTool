@@ -78,6 +78,7 @@ export class PollingCoordinator {
       this.store.closeSession(this.currentSessionId, now);
     }
 
+    this.store.closeOpenSessionsExcept(streamStartedAt, now);
     const existing = this.store.findOpenSession(streamStartedAt);
     const sessionId = existing?.id ?? `session-${Date.parse(streamStartedAt)}-${Date.now()}`;
     this.store.ensureSession(sessionId, streamStartedAt, now);
