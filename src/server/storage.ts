@@ -131,6 +131,14 @@ export class SnapshotStore {
     return row ?? null;
   }
 
+  closeOpenSessionsExcept(streamStartedAt: string, endedAt: string): void {
+    this.database.prepare(`
+      UPDATE stream_sessions
+      SET ended_at = ?
+      WHERE ended_at IS NULL AND stream_started_at <> ?
+    `).run(endedAt, streamStartedAt);
+  }
+
   ensureSession(id: string, streamStartedAt: string, observedAt: string): void {
     this.database.prepare(`
       INSERT OR IGNORE INTO stream_sessions(id, stream_started_at, observed_at, ended_at)
