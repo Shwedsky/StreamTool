@@ -4,19 +4,19 @@
 
 Phase 0 proves the StreamTool application shell and end-to-end local data path before any real streaming platform credentials are introduced.
 
-## Prerequisites
+## Owner / non-developer test path (Windows)
 
-- Node.js 22+
-- npm
+No Git, Node.js, npm, VS Code or terminal setup is required.
 
-## Build and start
+1. Open PR #2 on GitHub.
+2. Open the latest successful **Windows Portable** workflow run.
+3. Download the `StreamTool-Windows-x64` artifact.
+4. Extract the ZIP to any normal folder.
+5. Double-click `START_STREAMTOOL.cmd`.
+6. Keep the console window open while testing; the default browser opens automatically.
+7. Closing the console window stops the local StreamTool backend.
 
-```bash
-npm install
-npm run typecheck
-npm run build
-npm start
-```
+The portable artifact bundles its own Node.js runtime and all production dependencies. Nothing is installed system-wide.
 
 Expected startup behavior:
 
@@ -25,7 +25,7 @@ Expected startup behavior:
 3. The polling coordinator stores the first snapshot.
 4. Fastify binds to `127.0.0.1` with `port: 0`.
 5. The operating system selects an available port.
-6. StreamTool logs the actual URL and opens it in the default browser.
+6. StreamTool opens that actual URL in the default browser.
 
 No fixed application port is required.
 
@@ -57,33 +57,34 @@ Phase 1 will add historical graph queries, average viewers, deltas over 1/5/15/3
 
 ## Persistence
 
-Default database location:
+Default database location on Windows:
 
-- Windows: `%LOCALAPPDATA%/StreamTool/streamtool.db`
-- Linux/macOS fallback: user data directory under `.local/share/StreamTool/streamtool.db`
-
-For tests or development, the location can be overridden:
-
-```bash
-STREAMTOOL_DB_PATH=/custom/path/streamtool.db npm start
-```
+`%LOCALAPPDATA%\StreamTool\streamtool.db`
 
 SQLite runs in WAL mode with `synchronous=NORMAL` to keep writes lightweight.
 
-## Headless mode
+## Developer path
 
-To prevent automatic browser launch:
+Developers can run the source tree with Node.js 22+:
+
+```bash
+npm install
+npm run typecheck
+npm run build
+npm start
+```
+
+For CI/headless use:
 
 ```bash
 STREAMTOOL_NO_OPEN=1 npm start
 ```
 
-This is what CI uses.
-
 ## Verification checklist
 
-- application binds only to `127.0.0.1`
-- port differs safely when the preferred/common ports are occupied because no fixed port is requested
+- portable package starts on Windows without separately installed Git/Node/npm
+- packaged app binds only to `127.0.0.1`
+- port is selected automatically by the operating system
 - dashboard loads from the same backend origin
 - `/compact` loads successfully
 - `/api/health` returns `status: ok`
@@ -92,17 +93,19 @@ This is what CI uses.
 - SQLite file receives platform snapshots
 - opening multiple browser tabs does not create extra platform polling loops
 
-## CI
+## CI and packaging
 
-`.github/workflows/ci.yml` runs on pull requests and main pushes with Node.js 22.
+`.github/workflows/ci.yml` verifies the source build on Linux.
 
-It verifies:
+`.github/workflows/windows-portable.yml` verifies the exact Windows portable delivery path. It:
 
-1. dependency installation
-2. TypeScript typecheck
-3. production build
-4. actual runtime startup on an OS-assigned localhost port
-5. HTTP responses from `/api/health`, `/api/snapshot`, `/` and `/compact`
+1. installs/builds dependencies on a Windows runner
+2. runs TypeScript typecheck and production build
+3. removes development-only dependencies
+4. bundles the Node runtime, production dependencies and built application
+5. smoke-tests the packaged application itself
+6. verifies `/api/health`, `/api/snapshot`, `/` and `/compact`
+7. uploads `StreamTool-Windows-x64` as a downloadable artifact
 
 ## Security boundary
 
