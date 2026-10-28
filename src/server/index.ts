@@ -95,6 +95,7 @@ if (existsSync(webRoot)) {
 
   app.get('/dashboard', async (_request, reply) => reply.sendFile('index.html'));
   app.get('/compact', async (_request, reply) => reply.sendFile('index.html'));
+  app.get('/reports', async (_request, reply) => reply.sendFile('index.html'));
 }
 
 await coordinator.start();
