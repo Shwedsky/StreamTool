@@ -116,6 +116,21 @@ export class SnapshotStore {
     return row ?? null;
   }
 
+  getSession(id: string): StoredSession | null {
+    const row = this.database.prepare(`
+      SELECT
+        id,
+        stream_started_at AS streamStartedAt,
+        observed_at AS observedAt,
+        ended_at AS endedAt
+      FROM stream_sessions
+      WHERE id = ?
+      LIMIT 1
+    `).get(id) as StoredSession | undefined;
+
+    return row ?? null;
+  }
+
   ensureSession(id: string, streamStartedAt: string, observedAt: string): void {
     this.database.prepare(`
       INSERT OR IGNORE INTO stream_sessions(id, stream_started_at, observed_at, ended_at)
