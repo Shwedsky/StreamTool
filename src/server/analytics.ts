@@ -38,30 +38,24 @@ export function rowsToHistory(rows: StoredViewerRow[]): HistoryPoint[] {
   return [...byTime.values()].sort((a, b) => Date.parse(a.capturedAt) - Date.parse(b.capturedAt));
 }
 
-function closestPoint(points: HistoryPoint[], targetMs: number): HistoryPoint | null {
-  if (!points.length || Date.parse(points[0].capturedAt) > targetMs) return null;
-
+function historicalPoint(points: HistoryPoint[], targetMs: number): HistoryPoint | null {
   let best: HistoryPoint | null = null;
-  let bestDistance = Number.POSITIVE_INFINITY;
 
   for (const point of points) {
     const time = Date.parse(point.capturedAt);
-    const distance = Math.abs(time - targetMs);
-    if (distance < bestDistance) {
-      best = point;
-      bestDistance = distance;
-    }
-    if (time > targetMs && distance > bestDistance) break;
+    if (time > targetMs) break;
+    best = point;
   }
 
-  return bestDistance <= DELTA_TOLERANCE_MS ? best : null;
+  if (!best) return null;
+  return targetMs - Date.parse(best.capturedAt) <= DELTA_TOLERANCE_MS ? best : null;
 }
 
 function calculateDelta(points: HistoryPoint[], minutes: number): number | null {
   const latest = points.at(-1);
   if (!latest) return null;
   const target = Date.parse(latest.capturedAt) - minutes * 60_000;
-  const previous = closestPoint(points, target);
+  const previous = historicalPoint(points, target);
   return previous ? latest.totalViewers - previous.totalViewers : null;
 }
 
@@ -81,7 +75,7 @@ function calculateBestGrowth(points: HistoryPoint[]): GrowthWindow | null {
     for (let index = 1; index < points.length; index += 1) {
       const current = points[index];
       const target = Date.parse(current.capturedAt) - minutes * 60_000;
-      const previous = closestPoint(points.slice(0, index), target);
+      const previous = historicalPoint(points.slice(0, index), target);
       if (!previous) continue;
 
       const candidate: GrowthWindow = {
