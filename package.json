@@ -12,7 +12,8 @@
     "start": "node dist/server/server/index.js",
     "dev:server": "tsx watch src/server/index.ts",
     "dev:ui": "vite",
-    "typecheck": "tsc -p tsconfig.server.json --noEmit && tsc -p tsconfig.client.json --noEmit"
+    "typecheck": "tsc -p tsconfig.server.json --noEmit && tsc -p tsconfig.client.json --noEmit",
+    "test": "tsx --test src/server/*.test.ts"
   },
   "dependencies": {
     "@fastify/static": "^8.2.0",
