@@ -24,7 +24,7 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
-      - name: Analytics tests
+      - name: Tests
         run: npm test
 
       - name: Build
@@ -73,7 +73,8 @@ jobs:
           5. Closing the black window stops the app.
 
           Nothing needs to be installed. The required Node.js runtime is bundled in this test package.
-          Application data is stored in %LOCALAPPDATA%\StreamTool.
+          Application data, including local Twitch authorization state, is stored under %LOCALAPPDATA%\StreamTool.
+          Twitch Client Secret is not required by this build and must not be entered or shared.
           '@ | Set-Content -Path (Join-Path $root 'README_TEST.txt') -Encoding ascii
 
       - name: Smoke test packaged build
@@ -114,6 +115,9 @@ jobs:
             $snapshot = (Invoke-WebRequest "$url/api/snapshot" -UseBasicParsing).Content
             if ($snapshot -notmatch '"analytics"') { throw 'Analytics payload missing from packaged build.' }
             Invoke-WebRequest "$url/api/sessions" -UseBasicParsing | Out-Null
+            $auth = (Invoke-WebRequest "$url/api/platforms/twitch/auth" -UseBasicParsing).Content
+            if ($auth -notmatch '"state"') { throw 'Twitch auth state missing from packaged build.' }
+            if ($auth -match 'accessToken|refreshToken|access_token|refresh_token') { throw 'Twitch auth endpoint leaked token material.' }
             Invoke-WebRequest "$url/" -UseBasicParsing | Out-Null
             Invoke-WebRequest "$url/compact" -UseBasicParsing | Out-Null
             Invoke-WebRequest "$url/reports" -UseBasicParsing | Out-Null
