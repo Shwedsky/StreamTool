@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import type { PlatformSnapshot } from '../shared/domain.js';
-import { calculateAnalytics, rowsToHistory } from './analytics.js';
+import type { HistoryPoint, PlatformSnapshot } from '../shared/domain.js';
+import { calculateAnalytics, downsampleHistory, rowsToHistory } from './analytics.js';
 import type { StoredViewerRow } from './storage.js';
 
 const base = Date.parse('2026-10-29T00:00:00.000Z');
@@ -52,4 +52,24 @@ test('calculateAnalytics derives average, peak, deltas and audience share', () =
   assert.equal(analytics.audienceShare[1].percent, 39.1);
   assert.equal(analytics.bestGrowth?.delta, 15);
   assert.equal(analytics.bestGrowth?.minutes, 5);
+});
+
+test('downsampleHistory preserves short raid spikes while compressing a long stream', () => {
+  const history: HistoryPoint[] = Array.from({ length: 1_200 }, (_value, index) => ({
+    capturedAt: new Date(base + index * 15_000).toISOString(),
+    totalViewers: index === 613 ? 88 : 20,
+    viewersByPlatform: {
+      'vk-live': index === 613 ? 48 : 11,
+      twitch: index === 613 ? 40 : 9
+    }
+  }));
+
+  const compressed = downsampleHistory(history);
+
+  assert.ok(compressed.length <= 480);
+  assert.equal(compressed[0].capturedAt, history[0].capturedAt);
+  assert.equal(compressed.at(-1)?.capturedAt, history.at(-1)?.capturedAt);
+  assert.ok(compressed.some((point) => point.totalViewers === 88));
+  assert.ok(compressed.some((point) => point.viewersByPlatform['vk-live'] === 48));
+  assert.ok(compressed.some((point) => point.viewersByPlatform.twitch === 40));
 });
