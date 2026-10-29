@@ -1,0 +1,153 @@
+.shell {
+  grid-template-rows: auto auto auto auto;
+}
+
+.analytics-panel {
+  grid-template-columns: 286px minmax(0, 1fr);
+  gap: 12px;
+  min-height: 0;
+  padding: 10px 12px;
+}
+
+.analytics-summary {
+  gap: 5px;
+}
+
+.analytics-title {
+  min-height: 14px;
+}
+
+.analytics-kpis {
+  gap: 5px;
+}
+
+.analytics-kpis > div {
+  min-height: 48px;
+  padding: 6px 7px;
+  border-radius: 8px;
+}
+
+.analytics-kpis span {
+  min-height: 15px;
+  font-size: 7px;
+}
+
+.analytics-kpis strong {
+  margin-top: 1px;
+  font-size: 15px;
+}
+
+.analytics-kpis small {
+  margin-top: 0;
+  font-size: 7px;
+}
+
+.delta-strip {
+  gap: 5px;
+}
+
+.delta-strip div {
+  min-height: 36px;
+  padding: 4px 5px;
+  border-radius: 8px;
+}
+
+.delta-strip span {
+  font-size: 7px;
+}
+
+.delta-strip strong {
+  font-size: 12px;
+}
+
+.chart-wrap {
+  min-width: 0;
+  justify-content: center;
+}
+
+.chart-plot {
+  position: relative;
+  min-width: 0;
+  padding-left: 34px;
+}
+
+.viewer-chart {
+  display: block;
+  width: 100%;
+  height: 108px;
+}
+
+.chart-axis-title {
+  position: absolute;
+  left: 0;
+  top: -10px;
+  color: #626d7f;
+  font-size: 7px;
+  font-weight: 700;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+}
+
+.chart-y-labels {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 29px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: space-between;
+  color: #596477;
+  font-size: 8px;
+  line-height: 1;
+  pointer-events: none;
+}
+
+.chart-time {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: center;
+  gap: 6px;
+  margin: 3px 0 0 34px;
+  color: #515c6d;
+  font-size: 8px;
+}
+
+.chart-time span:nth-child(2) {
+  text-align: center;
+}
+
+.chart-time span:last-child {
+  text-align: right;
+}
+
+.chart-axis-note {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 1px 0 0 34px;
+  color: #4d5768;
+  font-size: 7px;
+}
+
+.report-chart .viewer-chart {
+  height: 230px;
+}
+
+.report-chart .chart-axis-title,
+.report-chart .chart-y-labels,
+.report-chart .chart-time,
+.report-chart .chart-axis-note {
+  font-size: 9px;
+}
+
+@media (max-width: 899px), (max-height: 759px) {
+  .analytics-panel {
+    grid-template-columns: 1fr;
+  }
+
+  .viewer-chart {
+    height: 132px;
+  }
+}

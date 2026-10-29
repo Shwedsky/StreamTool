@@ -21,11 +21,52 @@ export interface PlatformSnapshot {
   updatedAt: string;
 }
 
+export interface ViewerDeltaWindows {
+  oneMinute: number | null;
+  fiveMinutes: number | null;
+  fifteenMinutes: number | null;
+  thirtyMinutes: number | null;
+}
+
+export interface PlatformAudienceShare {
+  platformId: PlatformId;
+  viewers: number;
+  percent: number;
+}
+
+export interface HistoryPoint {
+  capturedAt: string;
+  totalViewers: number;
+  viewersByPlatform: Record<string, number>;
+}
+
+export interface GrowthWindow {
+  minutes: 1 | 5 | 15 | 30;
+  delta: number;
+  fromAt: string;
+  toAt: string;
+}
+
+export interface StreamAnalytics {
+  sessionId: string | null;
+  streamStartedAt: string | null;
+  observedSince: string | null;
+  sampleCount: number;
+  averageViewers: number | null;
+  peakViewers: number;
+  peakAt: string | null;
+  deltas: ViewerDeltaWindows;
+  audienceShare: PlatformAudienceShare[];
+  bestGrowth: GrowthWindow | null;
+  history: HistoryPoint[];
+}
+
 export interface AppSnapshot {
   generatedAt: string;
   totalViewers: number;
   peakViewers: number;
   platforms: PlatformSnapshot[];
+  analytics: StreamAnalytics;
 }
 
 export interface PlatformAdapter {

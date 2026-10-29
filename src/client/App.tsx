@@ -1,7 +1,20 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { AppSnapshot, PlatformSnapshot } from '../shared/domain';
+import type { AppSnapshot, HistoryPoint, PlatformSnapshot, StreamAnalytics } from '../shared/domain';
 
 const numberFormatter = new Intl.NumberFormat('ru-RU');
+
+interface SessionInfo {
+  id: string;
+  streamStartedAt: string;
+  observedAt: string;
+  endedAt: string | null;
+}
+
+interface ChartScale {
+  min: number;
+  max: number;
+  mid: number;
+}
 
 function formatNumber(value: number | null): string {
   return value == null ? '—' : numberFormatter.format(value);
@@ -22,6 +35,30 @@ function formatUpdatedAt(value: string): string {
     minute: '2-digit',
     second: '2-digit'
   });
+}
+
+function formatDateTime(value: string): string {
+  return new Date(value).toLocaleString('ru-RU', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+}
+
+function formatElapsed(milliseconds: number): string {
+  const totalMinutes = Math.max(0, Math.round(milliseconds / 60_000));
+  if (totalMinutes < 60) return `${totalMinutes} мин`;
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return minutes ? `${hours} ч ${minutes} мин` : `${hours} ч`;
+}
+
+function formatDelta(value: number | null): string {
+  if (value == null) return '—';
+  if (value > 0) return `+${numberFormatter.format(value)}`;
+  return numberFormatter.format(value);
 }
 
 function useLiveSnapshot() {
@@ -62,7 +99,15 @@ function BrandMark() {
   );
 }
 
-function PlatformCard({ platform, now }: { platform: PlatformSnapshot; now: string }) {
+function PlatformCard({
+  platform,
+  now,
+  sharePercent
+}: {
+  platform: PlatformSnapshot;
+  now: string;
+  sharePercent: number | null;
+}) {
   return (
     <article className="platform-card">
       <div className="platform-card__top">
@@ -70,7 +115,7 @@ function PlatformCard({ platform, now }: { platform: PlatformSnapshot; now: stri
           <p className="platform-name">{platform.platformName}</p>
           <div className="platform-online">
             <strong>{formatNumber(platform.viewers)}</strong>
-            <span>Зрители Online</span>
+            <div><span>Зрители Online</span>{sharePercent != null && <small>{sharePercent}% общего онлайна</small>}</div>
           </div>
         </div>
         <div className={`live-pill ${platform.health === 'error' ? 'live-pill--error' : ''}`}>
@@ -110,36 +155,163 @@ function PlatformCard({ platform, now }: { platform: PlatformSnapshot; now: stri
   );
 }
 
+const chartSelectors = [
+  (point: HistoryPoint) => point.totalViewers,
+  (point: HistoryPoint) => point.viewersByPlatform['vk-live'] ?? 0,
+  (point: HistoryPoint) => point.viewersByPlatform.twitch ?? 0
+];
+
+function chartScale(history: HistoryPoint[]): ChartScale {
+  const values = chartSelectors.flatMap((selector) => history.map(selector));
+  const observedMin = Math.min(...values);
+  const observedMax = Math.max(...values);
+  const spread = Math.max(1, observedMax - observedMin);
+  const padding = Math.max(1, spread * 0.12);
+  let min = Math.max(0, Math.floor(observedMin - padding));
+  let max = Math.ceil(observedMax + padding);
+
+  if (max - min < 4) {
+    const center = (max + min) / 2;
+    min = Math.max(0, Math.floor(center - 2));
+    max = Math.ceil(center + 2);
+  }
+
+  return {
+    min,
+    max,
+    mid: Math.round((min + max) / 2)
+  };
+}
+
+function chartPath(
+  history: HistoryPoint[],
+  selector: (point: HistoryPoint) => number,
+  scale: ChartScale
+): string {
+  if (!history.length) return '';
+  const width = 1000;
+  const height = 126;
+  const firstMs = Date.parse(history[0].capturedAt);
+  const lastMs = Date.parse(history.at(-1)!.capturedAt);
+  const durationMs = Math.max(1, lastMs - firstMs);
+  const verticalRange = Math.max(1, scale.max - scale.min);
+
+  return history.map((point) => {
+    const elapsedMs = Date.parse(point.capturedAt) - firstMs;
+    const x = (elapsedMs / durationMs) * width;
+    const normalized = (selector(point) - scale.min) / verticalRange;
+    const y = height - 5 - normalized * (height - 10);
+    return `${x.toFixed(1)},${Math.max(5, Math.min(height - 5, y)).toFixed(1)}`;
+  }).join(' ');
+}
+
+function ViewerChart({ history, emptyText = 'Собираем первые точки графика…' }: { history: HistoryPoint[]; emptyText?: string }) {
+  if (history.length < 2) return <div className="chart-empty">{emptyText}</div>;
+
+  const scale = chartScale(history);
+  const totalPath = chartPath(history, chartSelectors[0], scale);
+  const vkPath = chartPath(history, chartSelectors[1], scale);
+  const twitchPath = chartPath(history, chartSelectors[2], scale);
+  const firstMs = Date.parse(history[0].capturedAt);
+  const lastMs = Date.parse(history.at(-1)!.capturedAt);
+  const durationMs = Math.max(0, lastMs - firstMs);
+
+  return (
+    <>
+      <div className="chart-plot">
+        <span className="chart-axis-title">Зрители</span>
+        <div className="chart-y-labels" aria-hidden="true">
+          <span>{formatNumber(scale.max)}</span>
+          <span>{formatNumber(scale.mid)}</span>
+          <span>{formatNumber(scale.min)}</span>
+        </div>
+        <svg className="viewer-chart" viewBox="0 0 1000 126" preserveAspectRatio="none" role="img" aria-label="Динамика количества зрителей за время наблюдения">
+          <line x1="0" y1="5" x2="1000" y2="5" className="chart-grid" />
+          <line x1="0" y1="63" x2="1000" y2="63" className="chart-grid" />
+          <line x1="0" y1="121" x2="1000" y2="121" className="chart-grid" />
+          <polyline points={vkPath} className="chart-line chart-line--vk" />
+          <polyline points={twitchPath} className="chart-line chart-line--twitch" />
+          <polyline points={totalPath} className="chart-line chart-line--total" />
+        </svg>
+      </div>
+      <div className="chart-time">
+        <span>0 мин</span>
+        <span>{formatElapsed(durationMs / 2)}</span>
+        <span>{formatElapsed(durationMs)}</span>
+      </div>
+      <div className="chart-axis-note"><span>автомасштаб по зрителям</span><span>Время наблюдения →</span></div>
+    </>
+  );
+}
+
+function ChartLegend() {
+  return (
+    <div className="chart-legend">
+      <span className="legend-total"><i />Всего</span>
+      <span className="legend-vk"><i />VK</span>
+      <span className="legend-twitch"><i />Twitch</span>
+    </div>
+  );
+}
+
+function AnalyticsPanel({ snapshot }: { snapshot: AppSnapshot }) {
+  const { analytics } = snapshot;
+  const deltaItems = [
+    ['1 мин', analytics.deltas.oneMinute],
+    ['5 мин', analytics.deltas.fiveMinutes],
+    ['15 мин', analytics.deltas.fifteenMinutes],
+    ['30 мин', analytics.deltas.thirtyMinutes]
+  ] as const;
+
+  return (
+    <section className="analytics-panel">
+      <div className="analytics-summary">
+        <div className="analytics-title"><p className="eyebrow">Динамика стрима</p><ChartLegend /></div>
+        <div className="analytics-kpis">
+          <div><span>Средний за наблюдение</span><strong>{formatNumber(analytics.averageViewers)}</strong></div>
+          <div><span>Пик</span><strong>{formatNumber(analytics.peakViewers)}</strong><small>{analytics.peakAt ? formatUpdatedAt(analytics.peakAt) : '—'}</small></div>
+          <div><span>Лучший рост</span><strong>{analytics.bestGrowth ? formatDelta(analytics.bestGrowth.delta) : '—'}</strong><small>{analytics.bestGrowth ? `за ${analytics.bestGrowth.minutes} мин` : 'собираем данные'}</small></div>
+        </div>
+        <div className="delta-strip">
+          {deltaItems.map(([label, value]) => (
+            <div key={label} className={value == null ? '' : value > 0 ? 'delta-up' : value < 0 ? 'delta-down' : ''}>
+              <span>{label}</span><strong>{formatDelta(value)}</strong>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="chart-wrap"><ViewerChart history={analytics.history} /></div>
+    </section>
+  );
+}
+
 function Dashboard({ snapshot, connected }: { snapshot: AppSnapshot; connected: boolean }) {
+  const shareByPlatform = new Map(snapshot.analytics.audienceShare.map((share) => [share.platformId, share.percent]));
+
   return (
     <main className="shell">
       <header className="header">
         <div className="brand"><BrandMark /><div><strong>StreamToolByShwedsky</strong><small>Панель мультистрима</small></div></div>
-        <div className="header-status"><i className={connected ? 'status-dot' : 'status-dot status-dot--down'} />{connected ? 'данные подключены' : 'переподключение'}<span>DEMO</span></div>
+        <div className="header-actions"><a href="/reports">Отчёты</a><div className="header-status"><i className={connected ? 'status-dot' : 'status-dot status-dot--down'} />{connected ? 'данные подключены' : 'переподключение'}<span>DEMO</span></div></div>
       </header>
 
       <section className="hero">
         <p className="eyebrow">Суммарный онлайн</p>
         <div className="hero-number"><span className="eye">◉</span>{formatNumber(snapshot.totalViewers)}</div>
         <div className="hero-meta">
-          <div><span>Макс. зрителей</span><strong>{formatNumber(snapshot.peakViewers)}</strong></div>
-          <div><span>Площадки</span><strong>{snapshot.platforms.filter((p) => p.live).length} LIVE</strong></div>
+          <div><span>Макс. зрителей</span><strong>{formatNumber(snapshot.analytics.peakViewers)}</strong></div>
+          <div><span>Средний онлайн</span><strong>{formatNumber(snapshot.analytics.averageViewers)}</strong></div>
           <div><span>Последнее обновление</span><strong>{formatUpdatedAt(snapshot.generatedAt)}</strong></div>
         </div>
       </section>
 
       <section className="platforms">
-        {snapshot.platforms.map((platform) => <PlatformCard key={platform.platformId} platform={platform} now={snapshot.generatedAt} />)}
+        {snapshot.platforms.map((platform) => (
+          <PlatformCard key={platform.platformId} platform={platform} now={snapshot.generatedAt} sharePercent={shareByPlatform.get(platform.platformId) ?? null} />
+        ))}
       </section>
 
-      <section className="analytics-preview">
-        <div>
-          <p className="eyebrow">Аналитика</p>
-          <h3>История стрима сохраняется</h3>
-          <p>Следующий этап: график Total / VK / Twitch, средний онлайн, изменения за 1 / 5 / 15 / 30 минут и итоговый отчёт.</p>
-        </div>
-        <div className="pulse-bars" aria-hidden="true"><i/><i/><i/><i/><i/><i/><i/><i/><i/><i/></div>
-      </section>
+      <AnalyticsPanel snapshot={snapshot} />
     </main>
   );
 }
@@ -150,22 +322,100 @@ function Compact({ snapshot, connected }: { snapshot: AppSnapshot; connected: bo
     <main className="compact">
       <div className="compact-brand"><BrandMark /><strong>StreamToolByShwedsky</strong></div>
       <div className="compact-top"><span><i className={connected ? 'status-dot' : 'status-dot status-dot--down'} /> LIVE</span><strong>{live[0] ? formatDuration(live[0].startedAt, snapshot.generatedAt) : '—'}</strong></div>
-      <div className="compact-total"><small>СУММАРНЫЙ ОНЛАЙН</small><strong>◉ {formatNumber(snapshot.totalViewers)}</strong><span>Макс. зрителей {formatNumber(snapshot.peakViewers)}</span></div>
+      <div className="compact-total"><small>СУММАРНЫЙ ОНЛАЙН</small><strong>◉ {formatNumber(snapshot.totalViewers)}</strong><span>Макс. {formatNumber(snapshot.analytics.peakViewers)} · Средний {formatNumber(snapshot.analytics.averageViewers)}</span></div>
       <div className="compact-platforms">
         {snapshot.platforms.map((platform) => <div key={platform.platformId}><span>{platform.platformName}</span><strong>{formatNumber(platform.viewers)}</strong><small>Зрители Online</small></div>)}
       </div>
+      <div className="compact-deltas"><span>Δ 5 мин</span><strong>{formatDelta(snapshot.analytics.deltas.fiveMinutes)}</strong><span>Δ 15 мин</span><strong>{formatDelta(snapshot.analytics.deltas.fifteenMinutes)}</strong></div>
       <div className="compact-foot">Обновлено {formatUpdatedAt(snapshot.generatedAt)} · demo</div>
+    </main>
+  );
+}
+
+function Reports() {
+  const [sessions, setSessions] = useState<SessionInfo[]>([]);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [analytics, setAnalytics] = useState<StreamAnalytics | null>(null);
+
+  useEffect(() => {
+    fetch('/api/sessions', { cache: 'no-store' })
+      .then((response) => response.json() as Promise<{ sessions: SessionInfo[] }>)
+      .then(({ sessions: values }) => {
+        setSessions(values);
+        setSelectedId((current) => current ?? values[0]?.id ?? null);
+      })
+      .catch(() => setSessions([]));
+  }, []);
+
+  useEffect(() => {
+    if (!selectedId) {
+      setAnalytics(null);
+      return;
+    }
+    fetch(`/api/sessions/${encodeURIComponent(selectedId)}`, { cache: 'no-store' })
+      .then((response) => response.json() as Promise<{ analytics: StreamAnalytics }>)
+      .then((value) => setAnalytics(value.analytics))
+      .catch(() => setAnalytics(null));
+  }, [selectedId]);
+
+  const selected = sessions.find((session) => session.id === selectedId) ?? null;
+
+  return (
+    <main className="reports-shell">
+      <header className="reports-header">
+        <div className="brand"><BrandMark /><div><strong>StreamToolByShwedsky</strong><small>Отчёты по стримам</small></div></div>
+        <a href="/">← Онлайн-панель</a>
+      </header>
+      <div className="reports-layout">
+        <aside className="session-list">
+          <h1>Сессии</h1>
+          {sessions.length === 0 && <p className="reports-muted">Сессий пока нет.</p>}
+          {sessions.map((session) => (
+            <button key={session.id} type="button" className={session.id === selectedId ? 'session-item session-item--active' : 'session-item'} onClick={() => setSelectedId(session.id)}>
+              <strong>{formatDateTime(session.observedAt)}</strong>
+              <span>{session.endedAt ? 'Завершён' : 'Сейчас идёт'}</span>
+            </button>
+          ))}
+        </aside>
+        <section className="report-card">
+          {!selected || !analytics ? (
+            <div className="report-empty">Выберите сессию для просмотра отчёта.</div>
+          ) : (
+            <>
+              <div className="report-top">
+                <div><p className="eyebrow">{selected.endedAt ? 'Завершённый стрим' : 'Текущий стрим'}</p><h2>{formatDateTime(selected.streamStartedAt)}</h2><p className="reports-muted">Наблюдение с {formatDateTime(selected.observedAt)}{selected.endedAt ? ` до ${formatDateTime(selected.endedAt)}` : ''}</p></div>
+                <ChartLegend />
+              </div>
+              <div className="report-kpis">
+                <div><span>Средний онлайн</span><strong>{formatNumber(analytics.averageViewers)}</strong></div>
+                <div><span>Макс. зрителей</span><strong>{formatNumber(analytics.peakViewers)}</strong><small>{analytics.peakAt ? formatUpdatedAt(analytics.peakAt) : '—'}</small></div>
+                <div><span>Лучший рост</span><strong>{analytics.bestGrowth ? formatDelta(analytics.bestGrowth.delta) : '—'}</strong><small>{analytics.bestGrowth ? `за ${analytics.bestGrowth.minutes} мин` : '—'}</small></div>
+                <div><span>Точек данных</span><strong>{formatNumber(analytics.sampleCount)}</strong></div>
+              </div>
+              <div className="report-chart"><ViewerChart history={analytics.history} emptyText="Недостаточно точек для графика." /></div>
+            </>
+          )}
+        </section>
+      </div>
     </main>
   );
 }
 
 export function App() {
   const { snapshot, connected } = useLiveSnapshot();
-  const compact = useMemo(() => window.location.pathname === '/compact', []);
+  const path = useMemo(() => window.location.pathname, []);
+  const compact = path === '/compact';
+  const reports = path === '/reports';
 
   useEffect(() => {
-    document.title = compact ? 'StreamToolByShwedsky · Compact' : 'StreamToolByShwedsky';
-  }, [compact]);
+    document.title = reports
+      ? 'StreamToolByShwedsky · Отчёты'
+      : compact
+        ? 'StreamToolByShwedsky · Compact'
+        : 'StreamToolByShwedsky';
+  }, [compact, reports]);
+
+  if (reports) return <Reports />;
 
   if (!snapshot) {
     return <main className="loading"><BrandMark /><p>Подключаем StreamToolByShwedsky…</p></main>;

@@ -3,6 +3,7 @@ import Fastify from 'fastify';
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import open from 'open';
+import { calculateAnalytics } from './analytics.js';
 import { DemoPlatformAdapter } from './demo-adapter.js';
 import { PollingCoordinator } from './polling-coordinator.js';
 import { SnapshotStore } from './storage.js';
@@ -51,6 +52,25 @@ app.get('/api/snapshot', async (_request, reply) => {
   return coordinator.getLatest();
 });
 
+app.get('/api/sessions', async (_request, reply) => {
+  reply.header('Cache-Control', 'no-store');
+  return { sessions: store.listRecentSessions(20) };
+});
+
+app.get<{ Params: { id: string } }>('/api/sessions/:id', async (request, reply) => {
+  reply.header('Cache-Control', 'no-store');
+  const session = store.getSession(request.params.id);
+  if (!session) return reply.code(404).send({ error: 'Session not found' });
+
+  const analytics = calculateAnalytics(
+    session.id,
+    session.streamStartedAt,
+    [],
+    store.loadSessionViewerRows(session.id)
+  );
+  return { session, analytics };
+});
+
 app.get('/api/events', async (request, reply) => {
   reply.hijack();
   reply.raw.writeHead(200, {
@@ -75,6 +95,7 @@ if (existsSync(webRoot)) {
 
   app.get('/dashboard', async (_request, reply) => reply.sendFile('index.html'));
   app.get('/compact', async (_request, reply) => reply.sendFile('index.html'));
+  app.get('/reports', async (_request, reply) => reply.sendFile('index.html'));
 }
 
 await coordinator.start();
