@@ -69,12 +69,21 @@ jobs:
           1. Double-click START_STREAMTOOL.cmd
           2. Keep the black window open while testing.
           3. Your default browser should open automatically.
-          4. The app chooses a free localhost port automatically.
+          4. The dashboard chooses a free localhost port automatically.
           5. Closing the black window stops the app.
 
           Nothing needs to be installed. The required Node.js runtime is bundled in this test package.
-          Application data, including local Twitch authorization state, is stored under %LOCALAPPDATA%\StreamTool.
-          Twitch Client Secret is not required by this build and must not be entered or shared.
+          Application data and local authorization state are stored under %LOCALAPPDATA%\StreamTool.
+
+          TWITCH
+          - Twitch Client Secret is NOT required.
+          - Configure Twitch Client ID in the browser UI.
+
+          VK VIDEO LIVE
+          - Register this redirect URI in your VK Video Live developer application:
+            http://127.0.0.1:43187/api/platforms/vk-live/oauth/callback
+          - Enter your VK Video Live Client ID and Client Secret only in the local StreamTool UI.
+          - Never paste the VK Client Secret into chat or commit it to Git.
           '@ | Set-Content -Path (Join-Path $root 'README_TEST.txt') -Encoding ascii
 
       - name: Smoke test packaged build
@@ -115,9 +124,16 @@ jobs:
             $snapshot = (Invoke-WebRequest "$url/api/snapshot" -UseBasicParsing).Content
             if ($snapshot -notmatch '"analytics"') { throw 'Analytics payload missing from packaged build.' }
             Invoke-WebRequest "$url/api/sessions" -UseBasicParsing | Out-Null
-            $auth = (Invoke-WebRequest "$url/api/platforms/twitch/auth" -UseBasicParsing).Content
-            if ($auth -notmatch '"state"') { throw 'Twitch auth state missing from packaged build.' }
-            if ($auth -match 'accessToken|refreshToken|access_token|refresh_token') { throw 'Twitch auth endpoint leaked token material.' }
+
+            $twitchAuth = (Invoke-WebRequest "$url/api/platforms/twitch/auth" -UseBasicParsing).Content
+            if ($twitchAuth -notmatch '"state"') { throw 'Twitch auth state missing from packaged build.' }
+            if ($twitchAuth -match 'accessToken|refreshToken|access_token|refresh_token') { throw 'Twitch auth endpoint leaked token material.' }
+
+            $vkAuth = (Invoke-WebRequest "$url/api/platforms/vk-live/auth" -UseBasicParsing).Content
+            if ($vkAuth -notmatch '"state"') { throw 'VK Video Live auth state missing from packaged build.' }
+            if ($vkAuth -notmatch '"redirectUri"') { throw 'VK Video Live redirect URI missing from public auth state.' }
+            if ($vkAuth -match 'clientSecret|client_secret|accessToken|refreshToken|access_token|refresh_token') { throw 'VK Video Live auth endpoint leaked credential material.' }
+
             Invoke-WebRequest "$url/" -UseBasicParsing | Out-Null
             Invoke-WebRequest "$url/compact" -UseBasicParsing | Out-Null
             Invoke-WebRequest "$url/reports" -UseBasicParsing | Out-Null
