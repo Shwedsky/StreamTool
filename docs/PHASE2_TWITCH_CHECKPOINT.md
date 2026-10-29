@@ -1,6 +1,6 @@
 # Phase 2 — Twitch real integration
 
-Status: implementation started
+Status: implementation in progress
 
 Branch: `feature/phase2-twitch`
 
@@ -93,7 +93,7 @@ Implement:
 - persist the newly returned refresh token atomically before discarding the prior one
 - if refresh/validation becomes unrecoverable, mark Twitch as `reconnect_required` without breaking VK or historical data
 
-Device-flow refresh tokens are one-time-use and can expire after inactivity; reconnection must be a normal UI state rather than an application error.
+For a public client, Twitch refresh tokens are one-time use and currently expire 30 days after generation. Rotation and reconnect are therefore normal lifecycle states, not application failures.
 
 ## Credential storage
 
