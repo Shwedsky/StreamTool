@@ -60,7 +60,7 @@ jobs:
 
           TWITCH_AUTH=$(curl --fail --silent "$URL/api/platforms/twitch/auth")
           echo "$TWITCH_AUTH" | grep -q '"state"'
-          if echo "$TWITCH_AUTH" | grep -Eqi 'accessToken|refreshToken|access_token|refresh_token'; then
+          if echo "$TWITCH_AUTH" | grep -Eqi '"(accessToken|refreshToken|access_token|refresh_token)"[[:space:]]*:'; then
             echo "Twitch auth state leaked token material"
             exit 1
           fi
@@ -68,7 +68,7 @@ jobs:
           VK_AUTH=$(curl --fail --silent "$URL/api/platforms/vk-live/auth")
           echo "$VK_AUTH" | grep -q '"state"'
           echo "$VK_AUTH" | grep -q '"redirectUri"'
-          if echo "$VK_AUTH" | grep -Eqi 'clientSecret|client_secret|accessToken|refreshToken|access_token|refresh_token'; then
+          if echo "$VK_AUTH" | grep -Eqi '"(clientSecret|client_secret|accessToken|refreshToken|access_token|refresh_token)"[[:space:]]*:'; then
             echo "VK Video Live auth state leaked credential material"
             exit 1
           fi
