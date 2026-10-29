@@ -1,0 +1,115 @@
+.twitch-connect {
+  position: fixed;
+  top: 58px;
+  right: 14px;
+  z-index: 40;
+  width: min(330px, calc(100vw - 28px));
+  font-size: 11px;
+}
+
+.twitch-connect__toggle {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  max-width: 100%;
+  padding: 6px 9px;
+  border: 1px solid rgba(129,143,168,.16);
+  border-radius: 999px;
+  background: rgba(12,15,22,.94);
+  color: #aeb7c7;
+  cursor: pointer;
+  box-shadow: 0 8px 28px rgba(0,0,0,.2);
+}
+
+.twitch-connect__dot {
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #697487;
+}
+.twitch-connect__dot--connected { background: #37db8c; box-shadow: 0 0 10px rgba(55,219,140,.6); }
+.twitch-connect__dot--authorizing { background: #9d8cff; box-shadow: 0 0 10px rgba(157,140,255,.55); }
+.twitch-connect__dot--reconnect_required { background: #ff7a84; }
+
+.twitch-connect__panel {
+  margin-top: 7px;
+  padding: 13px;
+  border: 1px solid rgba(129,143,168,.17);
+  border-radius: 14px;
+  background: rgba(13,16,24,.985);
+  box-shadow: 0 22px 70px rgba(0,0,0,.48);
+}
+
+.twitch-connect__heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgba(129,143,168,.1);
+}
+.twitch-connect__heading strong { display: block; font-size: 13px; }
+.twitch-connect__heading small { display: block; margin-top: 2px; color: #697487; font-size: 9px; }
+.twitch-connect__heading > button {
+  border: 0;
+  background: transparent;
+  color: #798497;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.twitch-connect__section { padding-top: 11px; }
+.twitch-connect__section p { margin: 0 0 9px; color: #929daf; line-height: 1.45; }
+.twitch-connect__section input {
+  width: 100%;
+  padding: 9px 10px;
+  border: 1px solid #30394a;
+  border-radius: 9px;
+  outline: none;
+  background: #0b0e14;
+  color: #e8ebf2;
+}
+.twitch-connect__section input:focus { border-color: #7869ff; }
+
+.twitch-connect__primary,
+.twitch-connect__secondary {
+  width: 100%;
+  margin-top: 8px;
+  padding: 9px 11px;
+  border-radius: 9px;
+  cursor: pointer;
+}
+.twitch-connect__primary {
+  border: 1px solid rgba(124,105,255,.55);
+  background: linear-gradient(145deg, #7969ff, #5448df);
+  color: white;
+  font-weight: 700;
+}
+.twitch-connect__secondary {
+  border: 1px solid #30394a;
+  background: #141924;
+  color: #aeb8c8;
+}
+.twitch-connect button:disabled { opacity: .48; cursor: default; }
+
+.twitch-connect__hint { display: block; margin-top: 8px; color: #626d80; font-size: 9px; line-height: 1.4; }
+.twitch-connect__warning { color: #ff9aa2 !important; }
+.twitch-connect__connected { color: #8deab9 !important; }
+.twitch-connect__error { margin: 10px 0 0; color: #ff8993; font-size: 9px; line-height: 1.4; }
+
+.twitch-connect__activation { text-align: center; }
+.twitch-connect__activation > span { display: block; color: #717d90; font-size: 9px; }
+.twitch-connect__activation > strong {
+  display: block;
+  margin: 7px 0 3px;
+  color: #f4f2ff;
+  font-size: 25px;
+  letter-spacing: .12em;
+}
+
+@media (max-width: 899px), (max-height: 759px) {
+  .twitch-connect { top: 54px; right: 12px; }
+}
