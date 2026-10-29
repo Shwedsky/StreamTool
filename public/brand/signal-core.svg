@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">StreamTool Signal Core</title>
+  <desc id="desc">Hi-tech hexagonal telemetry core in violet and cyan.</desc>
+  <defs>
+    <linearGradient id="frame" x1="92" y1="85" x2="430" y2="430" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#9B5CFF"/>
+      <stop offset=".48" stop-color="#6758FF"/>
+      <stop offset="1" stop-color="#22DDF6"/>
+    </linearGradient>
+    <linearGradient id="signal" x1="128" y1="330" x2="410" y2="176" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#A13CFF"/>
+      <stop offset=".45" stop-color="#7457FF"/>
+      <stop offset="1" stop-color="#22DDF6"/>
+    </linearGradient>
+    <linearGradient id="steel" x1="128" y1="102" x2="397" y2="410" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#E9EDFF" stop-opacity=".7"/>
+      <stop offset=".18" stop-color="#705FFF" stop-opacity=".55"/>
+      <stop offset=".82" stop-color="#23DDF5" stop-opacity=".75"/>
+      <stop offset="1" stop-color="#40516A" stop-opacity=".5"/>
+    </linearGradient>
+    <filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="10" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="soft" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="4" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <rect width="512" height="512" rx="112" fill="#0B0E16"/>
+  <rect x="7" y="7" width="498" height="498" rx="105" fill="none" stroke="url(#frame)" stroke-opacity=".18" stroke-width="4"/>
+
+  <path d="M256 62 423 158v196L256 450 89 354V158L256 62Z" fill="#080B12" stroke="url(#frame)" stroke-width="28" stroke-linejoin="round" filter="url(#glow)"/>
+  <path d="M256 80 407 167v178L256 432 105 345V167L256 80Z" fill="#0B0F18" stroke="url(#steel)" stroke-width="5" stroke-linejoin="round"/>
+
+  <g fill="url(#signal)" stroke="#D6D2FF" stroke-opacity=".75" stroke-width="3" stroke-linejoin="round" filter="url(#soft)">
+    <path d="M145 264 192 237c10-6 18-1 18 11v40c0 11 5 18 15 24l93 54c12 7 12 17 0 24l-34 20c-10 6-19 6-29 0l-96-56c-10-6-16-15-16-27v-47c0-7 0-11 2-16Z"/>
+    <path d="M239 205 286 178c11-6 19-1 19 11v126l-51-30c-10-6-15-14-15-26V205Z"/>
+    <path d="M336 160 372 139c8-5 16-5 24 0l25 15c8 5 12 12 12 22v116c0 10-4 17-12 22l-36 21c-9 5-17 5-25 0l-24-14c-8-5-12-12-12-22V182c0-10 4-17 12-22Z"/>
+  </g>
+
+  <path d="M145 264 192 237c10-6 18-1 18 11v40c0 11 5 18 15 24l93 54" fill="none" stroke="#C675FF" stroke-width="5" stroke-linecap="round" opacity=".85"/>
+  <path d="M336 160 372 139c8-5 16-5 24 0" fill="none" stroke="#67F0FF" stroke-width="5" stroke-linecap="round" opacity=".9"/>
+</svg>
