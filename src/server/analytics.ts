@@ -9,7 +9,7 @@ import type {
 import type { StoredViewerRow } from './storage.js';
 
 const DELTA_TOLERANCE_MS = 90_000;
-const CHART_POINT_LIMIT = 180;
+const CHART_POINT_LIMIT = 480;
 const WINDOW_MINUTES = [1, 5, 15, 30] as const;
 
 function roundOne(value: number): number {
@@ -104,14 +104,43 @@ function calculateAudienceShare(platforms: PlatformSnapshot[]): PlatformAudience
   }));
 }
 
-function downsample(points: HistoryPoint[]): HistoryPoint[] {
+export function downsampleHistory(points: HistoryPoint[]): HistoryPoint[] {
   if (points.length <= CHART_POINT_LIMIT) return points;
 
-  const stride = Math.ceil(points.length / CHART_POINT_LIMIT);
-  const result = points.filter((_point, index) => index % stride === 0);
-  const last = points.at(-1);
-  if (last && result.at(-1)?.capturedAt !== last.capturedAt) result.push(last);
-  return result;
+  const platformIds = [...new Set(points.flatMap((point) => Object.keys(point.viewersByPlatform)))];
+  const selectors: Array<(point: HistoryPoint) => number> = [
+    (point) => point.totalViewers,
+    ...platformIds.map((platformId) => (point: HistoryPoint) => point.viewersByPlatform[platformId] ?? 0)
+  ];
+
+  const extremaPerBucket = Math.max(2, selectors.length * 2);
+  const bucketCount = Math.max(1, Math.floor((CHART_POINT_LIMIT - 2) / extremaPerBucket));
+  const interior = points.slice(1, -1);
+  const bucketSize = Math.max(1, Math.ceil(interior.length / bucketCount));
+  const selected: HistoryPoint[] = [points[0]];
+
+  for (let start = 0; start < interior.length; start += bucketSize) {
+    const bucket = interior.slice(start, start + bucketSize);
+    const chosen = new Set<number>();
+
+    for (const selector of selectors) {
+      let minIndex = 0;
+      let maxIndex = 0;
+      for (let index = 1; index < bucket.length; index += 1) {
+        if (selector(bucket[index]) < selector(bucket[minIndex])) minIndex = index;
+        if (selector(bucket[index]) > selector(bucket[maxIndex])) maxIndex = index;
+      }
+      chosen.add(minIndex);
+      chosen.add(maxIndex);
+    }
+
+    for (const index of [...chosen].sort((a, b) => a - b)) {
+      selected.push(bucket[index]);
+    }
+  }
+
+  selected.push(points.at(-1)!);
+  return selected;
 }
 
 export function calculateAnalytics(
@@ -138,6 +167,6 @@ export function calculateAnalytics(
     deltas: calculateDeltas(history),
     audienceShare: calculateAudienceShare(platforms),
     bestGrowth: calculateBestGrowth(history),
-    history: downsample(history)
+    history: downsampleHistory(history)
   };
 }
