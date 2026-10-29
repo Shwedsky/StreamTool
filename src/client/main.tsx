@@ -7,6 +7,7 @@ import './styles.css';
 import './reports.css';
 import './phase1-tuning.css';
 import './twitch-connect.css';
+import './brand.css';
 
 const showConnections = !['/compact', '/reports'].includes(window.location.pathname);
 
