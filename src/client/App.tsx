@@ -10,6 +10,12 @@ interface SessionInfo {
   endedAt: string | null;
 }
 
+interface ChartScale {
+  min: number;
+  max: number;
+  mid: number;
+}
+
 function formatNumber(value: number | null): string {
   return value == null ? '—' : numberFormatter.format(value);
 }
@@ -39,6 +45,14 @@ function formatDateTime(value: string): string {
     hour: '2-digit',
     minute: '2-digit'
   });
+}
+
+function formatElapsed(milliseconds: number): string {
+  const totalMinutes = Math.max(0, Math.round(milliseconds / 60_000));
+  if (totalMinutes < 60) return `${totalMinutes} мин`;
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return minutes ? `${hours} ч ${minutes} мин` : `${hours} ч`;
 }
 
 function formatDelta(value: number | null): string {
@@ -147,64 +161,85 @@ const chartSelectors = [
   (point: HistoryPoint) => point.viewersByPlatform.twitch ?? 0
 ];
 
-function relativeValues(history: HistoryPoint[], selector: (point: HistoryPoint) => number): number[] {
-  if (!history.length) return [];
-  const values = history.map(selector);
-  const baseline = values.find((value) => value > 0) ?? values[0] ?? 0;
-  const denominator = Math.max(1, baseline);
-  return values.map((value) => ((value - baseline) / denominator) * 100);
+function chartScale(history: HistoryPoint[]): ChartScale {
+  const values = chartSelectors.flatMap((selector) => history.map(selector));
+  const observedMin = Math.min(...values);
+  const observedMax = Math.max(...values);
+  const spread = Math.max(1, observedMax - observedMin);
+  const padding = Math.max(1, spread * 0.12);
+  let min = Math.max(0, Math.floor(observedMin - padding));
+  let max = Math.ceil(observedMax + padding);
+
+  if (max - min < 4) {
+    const center = (max + min) / 2;
+    min = Math.max(0, Math.floor(center - 2));
+    max = Math.ceil(center + 2);
+  }
+
+  return {
+    min,
+    max,
+    mid: Math.round((min + max) / 2)
+  };
 }
 
-function chartPercentScale(history: HistoryPoint[]): number {
-  const maxAbs = Math.max(
-    0,
-    ...chartSelectors.flatMap((selector) => relativeValues(history, selector).map((value) => Math.abs(value)))
-  );
-  const padded = Math.max(5, maxAbs * 1.15);
-  const step = padded <= 20 ? 5 : padded <= 50 ? 10 : padded <= 100 ? 20 : padded <= 250 ? 50 : 100;
-  return Math.ceil(padded / step) * step;
-}
-
-function chartPath(history: HistoryPoint[], selector: (point: HistoryPoint) => number, scale: number): string {
+function chartPath(
+  history: HistoryPoint[],
+  selector: (point: HistoryPoint) => number,
+  scale: ChartScale
+): string {
   if (!history.length) return '';
   const width = 1000;
-  const height = 142;
-  const halfHeight = height / 2;
-  const usableHalfHeight = halfHeight - 8;
-  const values = relativeValues(history, selector);
+  const height = 126;
+  const firstMs = Date.parse(history[0].capturedAt);
+  const lastMs = Date.parse(history.at(-1)!.capturedAt);
+  const durationMs = Math.max(1, lastMs - firstMs);
+  const verticalRange = Math.max(1, scale.max - scale.min);
 
-  return values.map((value, index) => {
-    const x = history.length === 1 ? width / 2 : (index / (history.length - 1)) * width;
-    const y = halfHeight - (value / scale) * usableHalfHeight;
+  return history.map((point) => {
+    const elapsedMs = Date.parse(point.capturedAt) - firstMs;
+    const x = (elapsedMs / durationMs) * width;
+    const normalized = (selector(point) - scale.min) / verticalRange;
+    const y = height - 5 - normalized * (height - 10);
     return `${x.toFixed(1)},${Math.max(5, Math.min(height - 5, y)).toFixed(1)}`;
   }).join(' ');
 }
 
 function ViewerChart({ history, emptyText = 'Собираем первые точки графика…' }: { history: HistoryPoint[]; emptyText?: string }) {
-  const scale = chartPercentScale(history);
+  if (history.length < 2) return <div className="chart-empty">{emptyText}</div>;
+
+  const scale = chartScale(history);
   const totalPath = chartPath(history, chartSelectors[0], scale);
   const vkPath = chartPath(history, chartSelectors[1], scale);
   const twitchPath = chartPath(history, chartSelectors[2], scale);
-  const firstTime = history[0]?.capturedAt;
-  const lastTime = history.at(-1)?.capturedAt;
-
-  if (history.length < 2) return <div className="chart-empty">{emptyText}</div>;
+  const firstMs = Date.parse(history[0].capturedAt);
+  const lastMs = Date.parse(history.at(-1)!.capturedAt);
+  const durationMs = Math.max(0, lastMs - firstMs);
 
   return (
     <>
-      <svg className="viewer-chart" viewBox="0 0 1000 142" preserveAspectRatio="none" role="img" aria-label="Относительная динамика зрителей стрима в процентах">
-        <line x1="0" y1="35.5" x2="1000" y2="35.5" className="chart-grid" />
-        <line x1="0" y1="71" x2="1000" y2="71" className="chart-grid chart-grid--zero" />
-        <line x1="0" y1="106.5" x2="1000" y2="106.5" className="chart-grid" />
-        <polyline points={vkPath} className="chart-line chart-line--vk" />
-        <polyline points={twitchPath} className="chart-line chart-line--twitch" />
-        <polyline points={totalPath} className="chart-line chart-line--total" />
-      </svg>
-      <div className="chart-time">
-        <span>{firstTime ? formatUpdatedAt(firstTime) : '—'}</span>
-        <span className="chart-scale-label">автомасштаб ±{scale}% · 0% = старт наблюдения</span>
-        <span>{lastTime ? formatUpdatedAt(lastTime) : '—'}</span>
+      <div className="chart-plot">
+        <span className="chart-axis-title">Зрители</span>
+        <div className="chart-y-labels" aria-hidden="true">
+          <span>{formatNumber(scale.max)}</span>
+          <span>{formatNumber(scale.mid)}</span>
+          <span>{formatNumber(scale.min)}</span>
+        </div>
+        <svg className="viewer-chart" viewBox="0 0 1000 126" preserveAspectRatio="none" role="img" aria-label="Динамика количества зрителей за время наблюдения">
+          <line x1="0" y1="5" x2="1000" y2="5" className="chart-grid" />
+          <line x1="0" y1="63" x2="1000" y2="63" className="chart-grid" />
+          <line x1="0" y1="121" x2="1000" y2="121" className="chart-grid" />
+          <polyline points={vkPath} className="chart-line chart-line--vk" />
+          <polyline points={twitchPath} className="chart-line chart-line--twitch" />
+          <polyline points={totalPath} className="chart-line chart-line--total" />
+        </svg>
       </div>
+      <div className="chart-time">
+        <span>0 мин</span>
+        <span>{formatElapsed(durationMs / 2)}</span>
+        <span>{formatElapsed(durationMs)}</span>
+      </div>
+      <div className="chart-axis-note"><span>автомасштаб по зрителям</span><span>Время наблюдения →</span></div>
     </>
   );
 }
@@ -231,7 +266,7 @@ function AnalyticsPanel({ snapshot }: { snapshot: AppSnapshot }) {
   return (
     <section className="analytics-panel">
       <div className="analytics-summary">
-        <div className="analytics-title"><p className="eyebrow">Динамика стрима · % к старту</p><ChartLegend /></div>
+        <div className="analytics-title"><p className="eyebrow">Динамика стрима</p><ChartLegend /></div>
         <div className="analytics-kpis">
           <div><span>Средний за наблюдение</span><strong>{formatNumber(analytics.averageViewers)}</strong></div>
           <div><span>Пик</span><strong>{formatNumber(analytics.peakViewers)}</strong><small>{analytics.peakAt ? formatUpdatedAt(analytics.peakAt) : '—'}</small></div>
