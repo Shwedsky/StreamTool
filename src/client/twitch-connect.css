@@ -1,9 +1,17 @@
-.twitch-connect {
+.connection-stack {
   position: fixed;
   top: 58px;
   right: 14px;
   z-index: 40;
-  width: min(330px, calc(100vw - 28px));
+  display: grid;
+  justify-items: end;
+  gap: 6px;
+  width: min(350px, calc(100vw - 28px));
+}
+
+.twitch-connect {
+  position: relative;
+  width: 100%;
   font-size: 11px;
 }
 
@@ -72,6 +80,7 @@
   background: #0b0e14;
   color: #e8ebf2;
 }
+.twitch-connect__section input + input { margin-top: 7px; }
 .twitch-connect__section input:focus { border-color: #7869ff; }
 
 .twitch-connect__primary,
@@ -87,6 +96,10 @@
   background: linear-gradient(145deg, #7969ff, #5448df);
   color: white;
   font-weight: 700;
+}
+.vk-connect .twitch-connect__primary {
+  border-color: rgba(55, 145, 255, .55);
+  background: linear-gradient(145deg, #2787f5, #1769ca);
 }
 .twitch-connect__secondary {
   border: 1px solid #30394a;
@@ -110,6 +123,20 @@
   letter-spacing: .12em;
 }
 
+.vk-connect__redirect {
+  display: block;
+  margin: 7px 0 10px;
+  padding: 8px 9px;
+  overflow-wrap: anywhere;
+  border: 1px solid rgba(39,135,245,.25);
+  border-radius: 8px;
+  background: #0b111c;
+  color: #84bcff;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 9px;
+  line-height: 1.4;
+}
+
 @media (max-width: 899px), (max-height: 759px) {
-  .twitch-connect { top: 54px; right: 12px; }
+  .connection-stack { top: 54px; right: 12px; width: min(340px, calc(100vw - 24px)); }
 }

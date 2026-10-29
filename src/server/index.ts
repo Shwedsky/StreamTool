@@ -4,38 +4,67 @@ import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import open from 'open';
 import { calculateAnalytics } from './analytics.js';
-import { DemoPlatformAdapter } from './demo-adapter.js';
 import { PollingCoordinator } from './polling-coordinator.js';
 import { SnapshotStore } from './storage.js';
 import { SseBroker } from './sse-broker.js';
 import { TwitchPlatformAdapter } from './twitch-adapter.js';
+import { VkVideoPlatformAdapter } from './vk-video-adapter.js';
 
 const app = Fastify({ logger: true });
 const broker = new SseBroker();
 const store = new SnapshotStore();
 const twitch = new TwitchPlatformAdapter();
-await twitch.initialize();
+const vkVideo = new VkVideoPlatformAdapter();
+await Promise.all([twitch.initialize(), vkVideo.initialize()]);
 
-const adapters = [
-  new DemoPlatformAdapter({
-    id: 'vk-live',
-    displayName: 'VK Видео Live',
-    baseViewers: 81,
-    baseFollowers: 4812,
-    baseReactions: 37,
-    baseViews: 1337,
-    phase: 0.4,
-    title: 'Вечерний мультистрим',
-    category: 'Just Chatting'
-  }),
-  twitch
-];
-
+const adapters = [vkVideo, twitch];
 const coordinator = new PollingCoordinator(adapters, store, broker);
+
+let dashboardUrl = '';
+let vkCallbackApp: ReturnType<typeof Fastify> | null = null;
+
+async function ensureVkCallbackServer(): Promise<void> {
+  if (vkCallbackApp) return;
+
+  const redirect = new URL(vkVideo.getRedirectUri());
+  if (redirect.protocol !== 'http:' || !['127.0.0.1', 'localhost'].includes(redirect.hostname)) {
+    throw new Error('VK redirect URI должен быть локальным http://127.0.0.1 или http://localhost адресом');
+  }
+  const port = Number(redirect.port);
+  if (!Number.isInteger(port) || port < 1024 || port > 65535) {
+    throw new Error('VK redirect URI должен содержать локальный порт');
+  }
+
+  const callback = Fastify({ logger: false });
+  callback.get<{
+    Querystring: { code?: string; state?: string; error?: string; error_description?: string };
+  }>(redirect.pathname, async (request, reply) => {
+    if (request.query.error) {
+      return reply.type('text/html; charset=utf-8').send(`<!doctype html><meta charset="utf-8"><title>VK Video Live</title><body style="font-family:system-ui;background:#111827;color:#e5e7eb;padding:40px"><h2>Подключение VK не завершено</h2><p>Вернитесь в StreamToolByShwedsky и попробуйте ещё раз.</p></body>`);
+    }
+
+    try {
+      await vkVideo.completeAuthorization(request.query.code ?? '', request.query.state ?? '');
+      const target = dashboardUrl || 'about:blank';
+      return reply.redirect(target);
+    } catch {
+      return reply.type('text/html; charset=utf-8').code(400).send(`<!doctype html><meta charset="utf-8"><title>VK Video Live</title><body style="font-family:system-ui;background:#111827;color:#e5e7eb;padding:40px"><h2>Не удалось подключить VK Video Live</h2><p>Вернитесь в StreamToolByShwedsky и повторите подключение.</p></body>`);
+    }
+  });
+
+  try {
+    await callback.listen({ host: redirect.hostname, port });
+  } catch {
+    await callback.close().catch(() => undefined);
+    throw new Error(`Не удалось занять порт ${port} для VK OAuth. Закройте программу, которая использует этот порт, и повторите.`);
+  }
+
+  vkCallbackApp = callback;
+}
 
 app.get('/api/health', async () => ({
   status: 'ok',
-  mode: twitch.getAuthStatus().connected ? 'vk-demo+twitch-live' : 'vk-demo+twitch-disconnected',
+  mode: `${vkVideo.getAuthStatus().connected ? 'vk-live' : 'vk-disconnected'}+${twitch.getAuthStatus().connected ? 'twitch-live' : 'twitch-disconnected'}`,
   sseClients: broker.clientCount,
   generatedAt: new Date().toISOString()
 }));
@@ -72,6 +101,38 @@ app.post('/api/platforms/twitch/connect', async (_request, reply) => {
 });
 
 app.post('/api/platforms/twitch/disconnect', async () => twitch.disconnect());
+
+app.get('/api/platforms/vk-live/auth', async (_request, reply) => {
+  reply.header('Cache-Control', 'no-store');
+  return vkVideo.getAuthStatus();
+});
+
+app.post<{ Body: { clientId?: string; clientSecret?: string } }>('/api/platforms/vk-live/config', async (request, reply) => {
+  const clientId = request.body?.clientId?.trim();
+  const clientSecret = request.body?.clientSecret?.trim();
+  if (!clientId || !clientSecret) {
+    return reply.code(400).send({ error: 'Укажите VK Video Live Client ID и Client Secret' });
+  }
+
+  try {
+    return vkVideo.configure(clientId, clientSecret);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Не удалось сохранить настройки VK Video Live';
+    return reply.code(400).send({ error: message });
+  }
+});
+
+app.post('/api/platforms/vk-live/connect', async (_request, reply) => {
+  try {
+    await ensureVkCallbackServer();
+    return vkVideo.beginAuthorization();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Не удалось начать подключение VK Video Live';
+    return reply.code(400).send({ error: message });
+  }
+});
+
+app.post('/api/platforms/vk-live/disconnect', async () => vkVideo.disconnect());
 
 app.get('/api/sessions', async (_request, reply) => {
   reply.header('Cache-Control', 'no-store');
@@ -120,11 +181,11 @@ if (existsSync(webRoot)) {
 }
 
 await coordinator.start();
-const url = await app.listen({ host: '127.0.0.1', port: 0 });
-app.log.info(`StreamTool listening on ${url}`);
+dashboardUrl = await app.listen({ host: '127.0.0.1', port: 0 });
+app.log.info(`StreamTool listening on ${dashboardUrl}`);
 
 if (process.env.STREAMTOOL_NO_OPEN !== '1') {
-  await open(url);
+  await open(dashboardUrl);
 }
 
 let shuttingDown = false;
@@ -133,6 +194,7 @@ async function shutdown(): Promise<void> {
   shuttingDown = true;
   coordinator.stop();
   store.close();
+  if (vkCallbackApp) await vkCallbackApp.close().catch(() => undefined);
   await app.close();
 }
 

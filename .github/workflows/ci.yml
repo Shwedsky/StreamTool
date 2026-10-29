@@ -57,12 +57,22 @@ jobs:
           curl --fail --silent "$URL/api/health"
           curl --fail --silent "$URL/api/snapshot" | grep -q '"analytics"'
           curl --fail --silent "$URL/api/sessions" | grep -q '"sessions"'
-          AUTH=$(curl --fail --silent "$URL/api/platforms/twitch/auth")
-          echo "$AUTH" | grep -q '"state"'
-          if echo "$AUTH" | grep -Eqi 'accessToken|refreshToken|access_token|refresh_token'; then
+
+          TWITCH_AUTH=$(curl --fail --silent "$URL/api/platforms/twitch/auth")
+          echo "$TWITCH_AUTH" | grep -q '"state"'
+          if echo "$TWITCH_AUTH" | grep -Eqi '"(accessToken|refreshToken|access_token|refresh_token)"[[:space:]]*:'; then
             echo "Twitch auth state leaked token material"
             exit 1
           fi
+
+          VK_AUTH=$(curl --fail --silent "$URL/api/platforms/vk-live/auth")
+          echo "$VK_AUTH" | grep -q '"state"'
+          echo "$VK_AUTH" | grep -q '"redirectUri"'
+          if echo "$VK_AUTH" | grep -Eqi '"(clientSecret|client_secret|accessToken|refreshToken|access_token|refresh_token)"[[:space:]]*:'; then
+            echo "VK Video Live auth state leaked credential material"
+            exit 1
+          fi
+
           curl --fail --silent "$URL/" > /dev/null
           curl --fail --silent "$URL/compact" > /dev/null
           curl --fail --silent "$URL/reports" > /dev/null
