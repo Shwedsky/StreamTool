@@ -8,10 +8,13 @@ import { DemoPlatformAdapter } from './demo-adapter.js';
 import { PollingCoordinator } from './polling-coordinator.js';
 import { SnapshotStore } from './storage.js';
 import { SseBroker } from './sse-broker.js';
+import { TwitchPlatformAdapter } from './twitch-adapter.js';
 
 const app = Fastify({ logger: true });
 const broker = new SseBroker();
 const store = new SnapshotStore();
+const twitch = new TwitchPlatformAdapter();
+await twitch.initialize();
 
 const adapters = [
   new DemoPlatformAdapter({
@@ -25,24 +28,14 @@ const adapters = [
     title: 'Вечерний мультистрим',
     category: 'Just Chatting'
   }),
-  new DemoPlatformAdapter({
-    id: 'twitch',
-    displayName: 'Twitch',
-    baseViewers: 53,
-    baseFollowers: 2341,
-    paidSubscribers: 41,
-    baseChatters: 28,
-    phase: 1.8,
-    title: 'Вечерний мультистрим',
-    category: 'Just Chatting'
-  })
+  twitch
 ];
 
 const coordinator = new PollingCoordinator(adapters, store, broker);
 
 app.get('/api/health', async () => ({
   status: 'ok',
-  mode: 'demo',
+  mode: twitch.getAuthStatus().connected ? 'vk-demo+twitch-live' : 'vk-demo+twitch-disconnected',
   sseClients: broker.clientCount,
   generatedAt: new Date().toISOString()
 }));
@@ -51,6 +44,34 @@ app.get('/api/snapshot', async (_request, reply) => {
   reply.header('Cache-Control', 'no-store');
   return coordinator.getLatest();
 });
+
+app.get('/api/platforms/twitch/auth', async (_request, reply) => {
+  reply.header('Cache-Control', 'no-store');
+  return twitch.getAuthStatus();
+});
+
+app.post<{ Body: { clientId?: string } }>('/api/platforms/twitch/config', async (request, reply) => {
+  const clientId = request.body?.clientId?.trim();
+  if (!clientId) return reply.code(400).send({ error: 'Укажите Twitch Client ID' });
+
+  try {
+    return twitch.configureClientId(clientId);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Не удалось сохранить Twitch Client ID';
+    return reply.code(400).send({ error: message });
+  }
+});
+
+app.post('/api/platforms/twitch/connect', async (_request, reply) => {
+  try {
+    return await twitch.beginDeviceFlow();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Не удалось начать подключение Twitch';
+    return reply.code(400).send({ error: message });
+  }
+});
+
+app.post('/api/platforms/twitch/disconnect', async () => twitch.disconnect());
 
 app.get('/api/sessions', async (_request, reply) => {
   reply.header('Cache-Control', 'no-store');
