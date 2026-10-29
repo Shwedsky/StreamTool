@@ -180,6 +180,9 @@ test('authorized VK account without a channel is a valid connected state', async
 
   const adapter = new VkVideoPlatformAdapter(store, async (input) => {
     const url = String(input);
+    if (url.endsWith('/v1/token')) {
+      return jsonResponse({ data: { valid: true } });
+    }
     if (url.endsWith('/v1/current_user')) {
       return jsonResponse({ data: { user: { nick: 'New VK User' }, channel: null } });
     }
