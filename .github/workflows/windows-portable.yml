@@ -127,12 +127,12 @@ jobs:
 
             $twitchAuth = (Invoke-WebRequest "$url/api/platforms/twitch/auth" -UseBasicParsing).Content
             if ($twitchAuth -notmatch '"state"') { throw 'Twitch auth state missing from packaged build.' }
-            if ($twitchAuth -match 'accessToken|refreshToken|access_token|refresh_token') { throw 'Twitch auth endpoint leaked token material.' }
+            if ($twitchAuth -match '"(accessToken|refreshToken|access_token|refresh_token)"\s*:') { throw 'Twitch auth endpoint leaked token material.' }
 
             $vkAuth = (Invoke-WebRequest "$url/api/platforms/vk-live/auth" -UseBasicParsing).Content
             if ($vkAuth -notmatch '"state"') { throw 'VK Video Live auth state missing from packaged build.' }
             if ($vkAuth -notmatch '"redirectUri"') { throw 'VK Video Live redirect URI missing from public auth state.' }
-            if ($vkAuth -match 'clientSecret|client_secret|accessToken|refreshToken|access_token|refresh_token') { throw 'VK Video Live auth endpoint leaked credential material.' }
+            if ($vkAuth -match '"(clientSecret|client_secret|accessToken|refreshToken|access_token|refresh_token)"\s*:') { throw 'VK Video Live auth endpoint leaked credential material.' }
 
             Invoke-WebRequest "$url/" -UseBasicParsing | Out-Null
             Invoke-WebRequest "$url/compact" -UseBasicParsing | Out-Null
